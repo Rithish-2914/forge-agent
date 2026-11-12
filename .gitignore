@@ -1,0 +1,5 @@
+node_modules/
+out/
+*.vsix
+forge.models.json
+.env

@@ -1,0 +1,197 @@
+{
+  "name": "forge-agent",
+  "displayName": "Forge Agent (TrueForge)",
+  "description": "Editor-native coding agent for VS Code whose agent loop runs on TrueForge. Hunk-by-hunk review, budgeted context retrieval, streaming, cancellation and automatic model fallback.",
+  "version": "0.1.0",
+  "publisher": "forge-agent",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages"
+  ],
+  "main": "./out/extension.js",
+  "type": "commonjs",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -w -p .",
+    "setup": "node scripts/setup-trueforge.mjs",
+    "headless": "node scripts/headless.mjs"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "forgeAgent",
+          "title": "Forge Agent",
+          "icon": "media/forge.svg"
+        }
+      ]
+    },
+    "views": {
+      "forgeAgent": [
+        {
+          "type": "webview",
+          "id": "forgeAgent.panel",
+          "name": "Agent"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "forgeAgent.inlineEdit",
+        "title": "Forge: Inline Edit Selection",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "forgeAgent.openPanel",
+        "title": "Forge: Open Agent Panel"
+      },
+      {
+        "command": "forgeAgent.ask",
+        "title": "Forge: Ask Agent…"
+      },
+      {
+        "command": "forgeAgent.cancel",
+        "title": "Forge: Stop Generation"
+      },
+      {
+        "command": "forgeAgent.acceptAll",
+        "title": "Forge: Accept All Hunks",
+        "icon": "$(check-all)"
+      },
+      {
+        "command": "forgeAgent.rejectAll",
+        "title": "Forge: Reject All Hunks",
+        "icon": "$(close-all)"
+      },
+      {
+        "command": "forgeAgent.undoLast",
+        "title": "Forge: Undo Last Change"
+      },
+      {
+        "command": "forgeAgent.openSession",
+        "title": "Forge: Open TrueForge Session"
+      },
+      {
+        "command": "forgeAgent.connect",
+        "title": "Forge: Connect / Re-register with TrueForge"
+      },
+      {
+        "command": "forgeAgent.reindex",
+        "title": "Forge: Re-index Workspace"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "forgeAgent.inlineEdit",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "forgeAgent.cancel",
+        "key": "ctrl+alt+x",
+        "mac": "cmd+alt+x",
+        "when": "forgeAgent.busy"
+      },
+      {
+        "command": "forgeAgent.acceptAll",
+        "key": "ctrl+alt+enter",
+        "mac": "cmd+alt+enter",
+        "when": "forgeAgent.reviewing"
+      },
+      {
+        "command": "forgeAgent.rejectAll",
+        "key": "ctrl+alt+backspace",
+        "mac": "cmd+alt+backspace",
+        "when": "forgeAgent.reviewing"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "forgeAgent.acceptAll",
+          "when": "resourceScheme == forge-proposal",
+          "group": "navigation@1"
+        },
+        {
+          "command": "forgeAgent.rejectAll",
+          "when": "resourceScheme == forge-proposal",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "forgeAgent.inlineEdit",
+          "when": "editorHasSelection",
+          "group": "1_modification"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Forge Agent",
+      "properties": {
+        "forgeAgent.trueforgeUrl": {
+          "type": "string",
+          "default": "http://localhost:8790",
+          "description": "Base URL of the local TrueForge server."
+        },
+        "forgeAgent.models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Ordered TrueForge model names (provider/model). First is primary; the rest take over automatically if it fails. Empty = use forge.models.json / the agent's model."
+        },
+        "forgeAgent.contextBudgetTokens": {
+          "type": "number",
+          "default": 8000,
+          "description": "Token budget for automatically retrieved context attached to each agent request."
+        },
+        "forgeAgent.retries": {
+          "type": "number",
+          "default": 2,
+          "description": "Retries with exponential backoff on transient model errors, before falling back to the next model."
+        },
+        "forgeAgent.firstTokenTimeoutSec": {
+          "type": "number",
+          "default": 45,
+          "description": "If the model produces nothing within this many seconds the attempt counts as failed (unreachable endpoint)."
+        },
+        "forgeAgent.mcpPort": {
+          "type": "number",
+          "default": 7465,
+          "description": "Port of the extension's MCP server (editor tools for the agent)."
+        },
+        "forgeAgent.mcpPublicHost": {
+          "type": "string",
+          "default": "localhost",
+          "description": "Host name TrueForge uses to reach the MCP server."
+        },
+        "forgeAgent.autoSetup": {
+          "type": "boolean",
+          "default": true,
+          "description": "On start-up, register the MCP server and the forge-coder agent in TrueForge."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@truefoundry/trueforge-sdk": "^0.184.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/vscode": "^1.90.0",
+    "typescript": "5.9"
+  }
+}
