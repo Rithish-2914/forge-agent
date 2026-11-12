@@ -18,7 +18,7 @@ From scratch, with no fork. The editor side (webview panel, diff rendering, hunk
   The agent decides what to read and change.
 * **TrueForge approval drives the diff review.** `require_approval_for_tools: [propose_edit, create_file, run_command]`. When `tool.approval_required` arrives, the extension rebuilds the proposal from the tool arguments and shows it hunk by hunk. It then answers `user.tool_approval` with *allow* if at least one hunk was accepted (otherwise *deny* with a reason). When TrueForge executes the approved tool, the MCP handler writes **only the accepted hunks** and tells the agent exactly which hunks were rejected. Edits whose `old_text` does not exist in the file are auto-denied before review, which targets the failure "confidently edits a symbol that does not exist".
 * **Harness features used, and why:**
-  * **Deferred tool loading:** core tools are in `preload_tools`, while `run_command`, `list_dir` and `git_diff` stay deferred, which keeps the tool schemas out of every prompt.
+  * **Deferred tool loading:** core tools (including `run_command`) are in `preload_tools`, while `list_dir` and `git_diff` stay deferred, which keeps the tool schemas out of every prompt.
   * **Compaction:** `input_tokens` trigger at 60k, so long agent runs on a repo larger than the window keep going.
   * **Dynamic subagents:** the root agent may delegate broad exploration and get back only paths and line ranges. Sub-agent threads render in the panel.
   * **Iteration limit:** 80.

@@ -22,7 +22,8 @@
           "find_symbol",
           "read_file",
           "propose_edit",
-          "create_file"
+          "create_file",
+          "run_command"
         ],
         "require_approval_for_tools": [
           "propose_edit",
