@@ -77,9 +77,13 @@ export async function setupTrueForge(o: SetupOptions) {
         log(`skip provider ${p.name ?? p.type}: set ${api_key_env} to register it`);
         continue;
       }
-      const manifest = { ...rest, name: p.name ?? p.type, auth: { api_key: key } };
+      // Well-known types are named after their type and reject a `name` field; only `custom` has one.
+      const { name: _ignored, ...base } = rest;
+      const manifest: any = { ...base, auth: { api_key: key } };
+      if (p.type === "custom") manifest.name = p.name;
+      const label = p.type === "custom" ? p.name : p.type;
       await http(o.trueforgeUrl, "PUT", "/api/v1/settings/model-providers", { manifest });
-      log(`model provider ${manifest.name}: ok (${(p.models ?? []).map((m: any) => m.name).join(", ")})`);
+      log(`model provider ${label}: ok (${(p.models ?? []).map((m: any) => m.name).join(", ")})`);
     }
   }
 
