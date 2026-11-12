@@ -35,8 +35,8 @@ From scratch, with no fork. The editor side (webview panel, diff rendering, hunk
 
 ## 5. Model setup
 TODO: final list. Planned:
-* **Primary:** `google-gemini/gemini-flash-latest` (free tier, catalog provider).
-* **Fallback:** `groq/llama-3-3-70b` (free tier, custom OpenAI-compatible provider).
+* **Primary:** `google-gemini/gemini-3-8-flash` (free tier, catalog provider).
+* **Fallback:** `groq/gpt-oss-120b` (free tier, custom OpenAI-compatible provider).
 * **Optional local:** Ollama `qwen2.5-coder:7b`.
 
 Approximate cost: ₹0 (free tiers). All models are configured in TrueForge. Users switch models by reordering the VS Code setting `forgeAgent.models` (or `forge.models.json`), or by adding a provider in TrueForge *Settings → Models*. During development we tested with a scripted mock endpoint, which is not used in the demo.

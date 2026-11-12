@@ -62,7 +62,7 @@ GEMINI_API_KEY=... GROQ_API_KEY=... node scripts/setup-trueforge.mjs
 
 Keys are read from environment variables and stored only inside TrueForge. **No key is ever committed**: `forge.models.json` is git-ignored.
 
-The `models` array is the fallback chain (first = primary). You can also set it in VS Code with `"forgeAgent.models": ["google-gemini/gemini-flash-latest", "groq/llama-3-3-70b"]`. To switch models, reorder that list.
+The `models` array is the fallback chain (first = primary). You can also set it in VS Code with `"forgeAgent.models": ["google-gemini/gemini-3-8-flash", "groq/gpt-oss-120b"]`. To switch models, reorder that list.
 
 ### 3. Run the extension
 

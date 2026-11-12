@@ -240,7 +240,9 @@ export class ForgeRunner {
     let finalText = "";
     let input: any[] = [{ type: "user.message", content: opts.input }];
     try {
+      let resumes = 0;
       for (let round = 0; round < 200; round++) {
+       try {
         const ac = new AbortController();
         const relay = () => ac.abort();
         opts.signal.addEventListener("abort", relay);
@@ -377,6 +379,20 @@ export class ForgeRunner {
           toolCallId: d.toolCallId,
           approval: d.allow ? { status: "allow" } : { status: "deny", reason: d.reason ?? "rejected by the user" },
         }));
+       } catch (e: any) {
+        // Rate limits / overload after the agent already made progress: wait and resume the SAME
+        // TrueForge session (its history is kept) instead of restarting the task from scratch.
+        const msg = String(e?.message ?? e);
+        const kind = e instanceof ModelFailure ? e.kind : classifyError(msg);
+        if (opts.signal.aborted || kind !== "transient" || toolCalls.size === 0 || resumes >= opts.retries + 3) throw e;
+        resumes++;
+        const hinted = /retry in ([\d.]+)s/i.exec(msg) ?? /"retryDelay":\s*"(\d+)s"/.exec(msg);
+        const waitS = Math.min(90, Math.max(hinted ? Math.ceil(Number(hinted[1])) + 1 : 0, 10 * 2 ** (resumes - 1)));
+        cb.onStatus(`Model ${model} is rate-limited/overloaded (${shorten(msg, 90)}). Resuming the same TrueForge session in ${waitS}s (${resumes}/${opts.retries + 3}); progress is kept.`, "warn");
+        await sleep(waitS * 1000, opts.signal);
+        if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model, text: finalText };
+        input = [{ type: "user.message", content: "Continue the task from exactly where you stopped. Do not redo steps that already succeeded." }];
+       }
       }
       throw new ModelFailure("too many approval rounds", "model");
     } finally {
