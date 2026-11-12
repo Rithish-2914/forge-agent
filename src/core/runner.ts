@@ -71,7 +71,7 @@ export class ModelFailure extends Error {
 
 export function classifyError(msg: string): ErrKind {
   const m = msg.toLowerCase();
-  if (/(401|403|unauthori[sz]ed|invalid.{0,20}(api)?.?key|incorrect api key|authentication|permission denied|forbidden)/.test(m)) return "auth";
+  if (/(401|403|unauthori[sz]ed|invalid.{0,20}(api)?.?key|key not valid|incorrect api key|api_key_invalid|authentication|permission denied|forbidden)/.test(m)) return "auth";
   if (/(econnrefused|enotfound|eai_again|etimedout|econnreset|fetch failed|timed? ?out|socket|network|unreachable|getaddrinfo|429|rate.?limit|502|503|504|overloaded|temporarily)/.test(m))
     return "transient";
   return "model";
