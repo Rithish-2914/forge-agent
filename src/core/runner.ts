@@ -61,7 +61,7 @@ export interface RunResult {
   attempts: Array<{ model: string; error?: string }>;
 }
 
-type ErrKind = "auth" | "transient" | "model" | "harness";
+type ErrKind = "auth" | "transient" | "quota" | "model" | "harness";
 
 export class ModelFailure extends Error {
   constructor(message: string, public kind: ErrKind) {
@@ -72,6 +72,8 @@ export class ModelFailure extends Error {
 export function classifyError(msg: string): ErrKind {
   const m = msg.toLowerCase();
   if (/(401|403|unauthori[sz]ed|invalid.{0,20}(api)?.?key|key not valid|incorrect api key|api_key_invalid|authentication|permission denied|forbidden)/.test(m)) return "auth";
+  // Exhausted daily/billing quota: waiting a minute will not help, so hand over to the next model.
+  if (/(per.?day|daily|insufficient_quota)/.test(m)) return "quota";
   if (/(econnrefused|enotfound|eai_again|etimedout|econnreset|fetch failed|timed? ?out|socket|network|unreachable|getaddrinfo|429|rate.?limit|502|503|504|overloaded|temporarily)/.test(m))
     return "transient";
   return "model";
@@ -181,11 +183,16 @@ export class ForgeRunner {
   }
 
   private async runOnce(opts: RunOptions, cb: RunCallbacks, model: string, attempt: number, primary: boolean): Promise<Omit<RunResult, "attempts">> {
-    const useName = !!opts.agentName && primary && (opts.baseSpec?.model?.name === model || !opts.baseSpec?.model?.name);
+    // TrueForge refuses to change the agent of a session created by name, so when a fallback
+    // model exists the session is created from the same forge-coder spec: the model can then be
+    // switched mid-run (sessions.update) without losing history.
+    const canHandover = opts.models.indexOf(model) + 1 < opts.models.length;
+    const useName = !!opts.agentName && primary && !canHandover && (opts.baseSpec?.model?.name === model || !opts.baseSpec?.model?.name);
     const agent = useName ? { name: opts.agentName! } : { spec: { ...opts.baseSpec, model: { ...(opts.baseSpec?.model ?? {}), name: model } } };
     let session;
     try {
-      session = (await this.client.sessions.create({ agent: agent as any, metadata: { client: "forge-agent-vscode" } as any }, { abortSignal: opts.signal })).data;
+      const metadata = { client: "forge-agent-vscode", agent: opts.agentName ?? "inline" };
+      session = (await this.client.sessions.create({ agent: agent as any, metadata: metadata as any }, { abortSignal: opts.signal })).data;
     } catch (e: any) {
       const body = e?.body ? JSON.stringify(e.body) : "";
       const msg = `${e?.message ?? e} ${body}`;
@@ -238,6 +245,7 @@ export class ForgeRunner {
       } catch {}
     };
     let finalText = "";
+    let curModel = model;
     let input: any[] = [{ type: "user.message", content: opts.input }];
     try {
       let resumes = 0;
@@ -325,14 +333,14 @@ export class ForgeRunner {
             }
           }
         } catch (e: any) {
-          if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model, text: finalText };
+          if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model: curModel, text: finalText };
           if (timedOut) throw new ModelFailure(`no response from the model within ${Math.round(opts.firstTokenTimeoutMs / 1000)}s`, "transient");
-          throw new ModelFailure(`stream failed: ${e?.message ?? e}`, classifyError(String(e?.message ?? e)) === "auth" ? "auth" : "transient");
+          { const k = classifyError(String(e?.message ?? e)); throw new ModelFailure(`stream failed: ${e?.message ?? e}`, k === "auth" || k === "quota" ? k : "transient"); }
         } finally {
           clearTimeout(timer);
           opts.signal.removeEventListener("abort", relay);
         }
-        if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model, text: finalText };
+        if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model: curModel, text: finalText };
         if (timedOut) throw new ModelFailure(`no response from the model within ${Math.round(opts.firstTokenTimeoutMs / 1000)}s`, "transient");
         // A turn that pauses for approval ends with turn.done{status:"done", requiredActions:[...]}.
         if (done && !pending.length && Array.isArray(done.requiredActions)) {
@@ -344,8 +352,8 @@ export class ForgeRunner {
         }
         if (pending.length) done = null;
         if (done) {
-          if (done.status === "done") return { status: "done", sessionId: session.id, model, text: finalText };
-          if (done.status === "cancelled") return { status: "cancelled", sessionId: session.id, model, text: finalText };
+          if (done.status === "done") return { status: "done", sessionId: session.id, model: curModel, text: finalText };
+          if (done.status === "cancelled") return { status: "cancelled", sessionId: session.id, model: curModel, text: finalText };
           const msg = String(done.message ?? "turn failed");
           throw new ModelFailure(msg, classifyError(msg));
         }
@@ -354,7 +362,7 @@ export class ForgeRunner {
           const turns = await this.client.sessions.listTurns(session.id, {} as any).catch(() => null);
           const last: any = (turns as any)?.data?.[0] ?? (turns as any)?.response?.data?.[0];
           const st = last?.state?.status;
-          if (st === "done") return { status: "done", sessionId: session.id, model, text: finalText };
+          if (st === "done") return { status: "done", sessionId: session.id, model: curModel, text: finalText };
           if (st === "error") throw new ModelFailure(String(last.state.message ?? "turn failed"), classifyError(String(last.state.message ?? "")));
           throw new ModelFailure("stream ended unexpectedly", "transient");
         }
@@ -372,7 +380,7 @@ export class ForgeRunner {
           continue;
         }
         const decisions = await cb.onApproval(approvals);
-        if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model, text: finalText };
+        if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model: curModel, text: finalText };
         input = decisions.map((d) => ({
           type: "user.tool_approval",
           threadId: d.threadId,
@@ -384,13 +392,32 @@ export class ForgeRunner {
         // TrueForge session (its history is kept) instead of restarting the task from scratch.
         const msg = String(e?.message ?? e);
         const kind = e instanceof ModelFailure ? e.kind : classifyError(msg);
-        if (opts.signal.aborted || kind !== "transient" || toolCalls.size === 0 || resumes >= opts.retries + 3) throw e;
+        if (opts.signal.aborted || toolCalls.size === 0 || kind === "harness") throw e;
+        const exhausted = kind !== "transient" || resumes >= opts.retries + 3;
+        if (exhausted) {
+          // The agent already made progress: switch THIS session to the next configured model
+          // (TrueForge keeps the history), so the fallback continues the task instead of redoing it.
+          const next = opts.models[opts.models.indexOf(curModel) + 1];
+          if (!next) throw e;
+          try {
+            const spec = { ...opts.baseSpec, model: { ...(opts.baseSpec?.model ?? {}), name: next } };
+            await this.client.sessions.update(session.id, { agent: { spec } as any }, { abortSignal: opts.signal });
+          } catch (pe: any) {
+            throw new ModelFailure(`${msg} (and could not switch the session to ${next}: ${pe?.message ?? pe})`, kind);
+          }
+          cb.onStatus(`Model ${curModel} failed (${shorten(msg, 90)}). Switched this TrueForge session to ${next} automatically; it continues with the full history.`, "warn");
+          cb.onSession?.({ sessionId: session.id, model: next, attempt: 1, viaAgentName: false });
+          curModel = next;
+          resumes = 0;
+          input = [{ type: "user.message", content: "The previous model stopped because of a provider error. Continue the task from exactly where it stopped. Do not redo steps that already succeeded." }];
+          continue;
+        }
         resumes++;
         const hinted = /retry in ([\d.]+)s/i.exec(msg) ?? /"retryDelay":\s*"(\d+)s"/.exec(msg);
         const waitS = Math.min(90, Math.max(hinted ? Math.ceil(Number(hinted[1])) + 1 : 0, 10 * 2 ** (resumes - 1)));
-        cb.onStatus(`Model ${model} is rate-limited/overloaded (${shorten(msg, 90)}). Resuming the same TrueForge session in ${waitS}s (${resumes}/${opts.retries + 3}); progress is kept.`, "warn");
+        cb.onStatus(`Model ${curModel} is rate-limited/overloaded (${shorten(msg, 90)}). Resuming the same TrueForge session in ${waitS}s (${resumes}/${opts.retries + 3}); progress is kept.`, "warn");
         await sleep(waitS * 1000, opts.signal);
-        if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model, text: finalText };
+        if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model: curModel, text: finalText };
         input = [{ type: "user.message", content: "Continue the task from exactly where you stopped. Do not redo steps that already succeeded." }];
        }
       }

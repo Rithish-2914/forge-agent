@@ -57,8 +57,8 @@
     }
   ],
   "models": [
-    "google-gemini/gemini-3-8-flash",
     "google-gemini/gemini-flash-lite-latest",
+    "google-gemini/gemini-3-8-flash",
     "groq/gpt-oss-120b",
     "ollama/qwen2-5-coder-7b"
   ]

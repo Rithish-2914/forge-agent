@@ -3,6 +3,7 @@
 // Register it in TrueForge as a custom provider; it is never used in the demo.
 //   node scripts/mock-model.mjs [port]           normal
 //   MOCK_FAIL=401 node scripts/mock-model.mjs    always fails (to test fallback)
+//   model id "mock-quota": fails with a per-day 429 after its first tool call (tests in-session handover)
 import http from "node:http";
 
 const port = Number(process.argv[2] ?? 11500);
@@ -61,6 +62,12 @@ http
       return;
     }
     const body = raw ? JSON.parse(raw) : {};
+    // Model "mock-quota": one tool call, then a daily-quota 429 (tests in-session model handover).
+    if (body.model === "mock-quota" && (body.messages ?? []).some((m) => m.role === "tool")) {
+      console.log("[mock] mock-quota -> 429 per-day");
+      res.writeHead(429, { "content-type": "application/json" }).end(JSON.stringify({ error: { message: "Quota exceeded: requests per day limit exceeded (mock)", type: "rate_limit_error" } }));
+      return;
+    }
     const p = plan(body);
     const id = "mock-" + Date.now();
     const model = body.model ?? "mock-coder";

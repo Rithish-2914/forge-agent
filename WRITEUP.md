@@ -35,8 +35,10 @@ From scratch, with no fork. The editor side (webview panel, diff rendering, hunk
 
 ## 5. Model setup
 TODO: final list. Planned:
-* **Primary:** `google-gemini/gemini-3-8-flash` (free tier, catalog provider).
-* **Fallback:** `groq/gpt-oss-120b` (free tier, custom OpenAI-compatible provider).
+* **Primary:** `google-gemini/gemini-flash-lite-latest` (free tier, catalog provider). It's first because the free tier allows `gemini-3-8-flash` only 20 requests per day, and one agent run needs dozens.
+* **Second:** `google-gemini/gemini-3-8-flash`.
+* **Third:** `groq/gpt-oss-120b` (free tier, custom OpenAI-compatible provider; its 8k tokens/min limit suits inline edits).
+* **Error handling:** rate limits (per minute) wait and resume in the same session. Daily-quota, auth and model errors switch the session to the next model.
 * **Optional local:** Ollama `qwen2.5-coder:7b`.
 
 Approximate cost: ₹0 (free tiers). All models are configured in TrueForge. Users switch models by reordering the VS Code setting `forgeAgent.models` (or `forge.models.json`), or by adding a provider in TrueForge *Settings → Models*. During development we tested with a scripted mock endpoint, which is not used in the demo.
@@ -60,7 +62,7 @@ Approximate cost: ₹0 (free tiers). All models are configured in TrueForge. Use
 
 ## 8. Known limitations and what we would do with another month
 * Retrieval is lexical (BM25). With more time we would add an optional embedding re-ranker and call-graph expansion (callers/callees of the top chunks).
-* Fallback restarts on a fresh session. Once a user has accepted edits in a run, Forge stops instead of silently redoing work on another model. With more time we would hand the session history to the fallback model.
+* Fallback before any progress starts a fresh session on the next model. After progress, Forge switches the **same** TrueForge session to the next model (`PATCH /sessions/{id}` with the forge-coder spec), so the history is kept and nothing is redone. Because TrueForge does not allow changing the agent of a session created by name, sessions are created from the forge-coder spec whenever a fallback model exists.
 * Hunk review is shown in the panel and in a diff editor. CodeLens inside the diff needs `diffEditor.codeLens: true`. With more time we would add inline accept/reject widgets inside the real editor.
 * `run_command` runs on the host shell after explicit approval. TrueForge's sandbox (Code Mode, skills) is not used yet.
 * Only one workspace folder is supported.
