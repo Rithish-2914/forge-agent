@@ -27,6 +27,7 @@ const index = new RepoIndex().build(root);
 console.log(`[index] ${index.files.length} files, ${index.chunks.length} chunks, ${index.symbols.length} symbols, ${index.totalLines} lines in ${Date.now() - t0}ms`);
 
 const decisions = new Map();
+let appliedEdits = 0;
 const host = {
   root,
   index,
@@ -44,6 +45,7 @@ const host = {
     fs.mkdirSync(path.dirname(path.join(root, p.path)), { recursive: true });
     fs.writeFileSync(path.join(root, p.path), next);
     index.updateFile(p.path, next);
+    if (accepted.size) appliedEdits++;
     console.log(`[apply] ${p.path}: ${accepted.size}/${p.hunks.length} hunks`);
     return `Applied ${accepted.size} of ${p.hunks.length} hunks to ${p.path}.`;
   },
@@ -72,7 +74,7 @@ const res = await runner.run(
     retries: 1,
     firstTokenTimeoutMs: 60000,
     signal: ac.signal,
-    hasSideEffects: () => false,
+    hasSideEffects: () => appliedEdits > 0,
   },
   {
     onStatus: (m, l) => console.log(`[status:${l ?? "info"}] ${m}`),

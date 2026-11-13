@@ -156,6 +156,10 @@ export class ForgeRunner {
           const kind: ErrKind = e instanceof ModelFailure ? e.kind : classifyError(msg);
           attempts.push({ model, error: msg });
           lastErr = msg;
+          if ((e as any)?.final) {
+            cb.onStatus(`All configured models failed (${shorten(msg)}). Stopped; the TrueForge session keeps the progress so far, and accepted changes stay (Undo is available).`, "error");
+            return { status: "error", text: "", error: msg, attempts };
+          }
           if (opts.hasSideEffects()) {
             cb.onStatus(`Model ${model} failed after edits were accepted: ${msg}. Stopping so nothing is redone silently; your accepted changes are kept (Undo is available).`, "error");
             return { status: "error", text: "", error: msg, attempts, model };
@@ -398,7 +402,12 @@ export class ForgeRunner {
           // The agent already made progress: switch THIS session to the next configured model
           // (TrueForge keeps the history), so the fallback continues the task instead of redoing it.
           const next = opts.models[opts.models.indexOf(curModel) + 1];
-          if (!next) throw e;
+          if (!next) {
+            // Every model was tried inside this session: stop here rather than redo the work in a fresh one.
+            const f = new ModelFailure(`${msg} (last model in the chain; the session keeps all progress)`, kind);
+            (f as any).final = true;
+            throw f;
+          }
           try {
             const spec = { ...opts.baseSpec, model: { ...(opts.baseSpec?.model ?? {}), name: next } };
             await this.client.sessions.update(session.id, { agent: { spec } as any }, { abortSignal: opts.signal });
