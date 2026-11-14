@@ -3,3 +3,4 @@ out/
 *.vsix
 forge.models.json
 .env
+WRITEUP.html
