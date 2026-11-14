@@ -42,7 +42,7 @@ Requirements: Node.js ≥ 22.14, VS Code ≥ 1.90, git. A Python environment is 
 npx @truefoundry/trueforge@latest
 ```
 
-The UI and API come up at <http://localhost:8790>. TrueForge blocks outbound calls to private hosts by default, so let it reach the extension's MCP server on loopback:
+The UI and API come up at <http://localhost:8790>. Forge is tested with TrueForge **0.185.1** (`npx @truefoundry/trueforge@0.185.1` pins it). TrueForge blocks outbound calls to private hosts by default, so let it reach the extension's MCP server on loopback:
 
 ```bash
 OUTBOUND_URL_ALLOWED_HOSTS='["localhost","127.0.0.1"]' npx @truefoundry/trueforge@latest

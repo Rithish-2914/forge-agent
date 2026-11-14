@@ -113,19 +113,8 @@ const snakeify = (v: any): any =>
       ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase()), snakeify(x)]))
       : v;
 
-/**
- * POST /sessions/{id}/turns as SSE, parsed by hand. The SDK's stream parser throws on event
- * variants newer than its schema (seen with TrueForge 0.183), which would abort a healthy turn;
- * here unknown events are simply passed through and ignored by the switch below.
- */
-async function* streamTurn(baseUrl: string, sessionId: string, input: any[], signal: AbortSignal): AsyncGenerator<any> {
-  const res = await fetch(`${baseUrl.replace(/\/$/, "")}/api/v1/sessions/${encodeURIComponent(sessionId)}/turns`, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "text/event-stream" },
-    body: JSON.stringify({ input: snakeify(input), stream: true }),
-    signal,
-  });
-  if (!res.ok || !res.body) throw new Error(`turn request failed (${res.status}): ${(await res.text().catch(() => "")).slice(0, 400)}`);
+/** Read a Server-Sent Events response and yield each JSON `data:` payload. */
+async function* readSse(res: Response): AsyncGenerator<any> {
   const decoder = new TextDecoder();
   let buf = "";
   for await (const chunk of res.body as any as AsyncIterable<Uint8Array>) {
@@ -149,6 +138,48 @@ async function* streamTurn(baseUrl: string, sessionId: string, input: any[], sig
   }
 }
 
+async function failText(res: Response, what: string, body?: unknown): Promise<Error> {
+  const detail = (await res.text().catch(() => "")).slice(0, 400);
+  if (process.env.FORGE_DEBUG) console.error(`[forge] ${what}`, JSON.stringify(body ?? null), "->", detail);
+  return new Error(`${what} failed (${res.status}): ${detail}`);
+}
+
+/**
+ * Turn streaming, parsed by hand instead of with the SDK's stream parser, which throws on event
+ * variants newer than its schema and would abort a healthy turn. Unknown events pass through.
+ *
+ * - User messages start a turn: POST /sessions/{id}/turns (SSE).
+ * - Approvals / tool responses answer the PAUSED turn (TrueForge >= 0.185):
+ *   POST /sessions/{id}/turns/{turn}/events, then GET .../subscribe?after_event_id=... (SSE).
+ *   Older servers took them as turn input; that path is the fallback.
+ */
+async function* streamTurn(
+  baseUrl: string,
+  sessionId: string,
+  input: any[],
+  signal: AbortSignal,
+  paused?: { turnId: string; lastEventId?: string },
+): AsyncGenerator<any> {
+  const base = `${baseUrl.replace(/\/$/, "")}/api/v1/sessions/${encodeURIComponent(sessionId)}/turns`;
+  const json = { "content-type": "application/json" };
+  if (paused?.turnId && input.every((i) => i.type !== "user.message")) {
+    const events = snakeify(input);
+    const r = await fetch(`${base}/${encodeURIComponent(paused.turnId)}/events`, { method: "POST", headers: json, body: JSON.stringify({ events }), signal });
+    if (r.ok) {
+      const q = paused.lastEventId ? `?after_event_id=${encodeURIComponent(paused.lastEventId)}` : "";
+      const sub = await fetch(`${base}/${encodeURIComponent(paused.turnId)}/subscribe${q}`, { headers: { accept: "text/event-stream" }, signal });
+      if (!sub.ok || !sub.body) throw await failText(sub, "turn subscribe");
+      yield* readSse(sub);
+      return;
+    }
+    if (r.status !== 404 && r.status !== 405) throw await failText(r, "turn events", events);
+    await r.text().catch(() => "");
+  }
+  const body = { input: snakeify(input), stream: true };
+  const res = await fetch(base, { method: "POST", headers: { ...json, accept: "text/event-stream" }, body: JSON.stringify(body), signal });
+  if (!res.ok || !res.body) throw await failText(res, "turn request", body);
+  yield* readSse(res);
+}
 export class ForgeRunner {
   client: any;
   constructor(readonly baseUrl: string) {}
@@ -299,6 +330,9 @@ export class ForgeRunner {
     let finalText = "";
     let curModel = model;
     let input: any[] = [{ type: "user.message", content: opts.input }];
+    // The turn currently paused for approvals (answers go to that turn, not a new one).
+    let turnRef: { turnId: string; lastEventId?: string } | undefined;
+    let pausedTurn: typeof turnRef;
     try {
       let resumes = 0;
       for (let round = 0; round < 200; round++) {
@@ -317,10 +351,19 @@ export class ForgeRunner {
         }, opts.firstTokenTimeoutMs);
         const pending: PendingToolCall[] = [];
         let done: any = null;
+        let paused = false;
         try {
-          for await (const rawEv of streamTurn(this.baseUrl, session.id, input, ac.signal)) {
+          const resumeOf = input.every((i) => i.type !== "user.message") ? pausedTurn : undefined;
+          pausedTurn = undefined;
+          for await (const rawEv of streamTurn(this.baseUrl, session.id, input, ac.signal, resumeOf)) {
             const ev = camelize(rawEv);
+            if (ev.type === "turn.created" && ev.turnId) turnRef = { turnId: ev.turnId };
+            if (turnRef && ev.id) turnRef.lastEventId = ev.id;
             switch (ev.type) {
+              case "turn.update":
+                // A turn waiting for approvals pauses and keeps the stream open: stop reading and answer.
+                if (ev.state?.status === "paused") paused = true;
+                break;
               case "model.message.delta": {
                 gotOutput = true;
                 if (ev.content) {
@@ -382,7 +425,9 @@ export class ForgeRunner {
                 if (typeof ev.type === "string" && ev.type.includes("compaction"))
                   cb.onCompaction?.(ev.type.includes("start") ? "started" : "finished", ev.threadId);
             }
+            if (done || (paused && pending.length)) break;
           }
+          if (paused && turnRef) pausedTurn = { ...turnRef };
         } catch (e: any) {
           if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model: curModel, text: finalText };
           if (timedOut) throw new ModelFailure(`no response from the model within ${Math.round(opts.firstTokenTimeoutMs / 1000)}s`, "transient");

@@ -72,3 +72,4 @@ Approximate cost: ₹0 (free tiers). All models are configured in TrueForge. Use
 * Hunk review is shown in the panel and in a diff editor. CodeLens inside the diff needs `diffEditor.codeLens: true`. With more time we would add inline accept/reject widgets inside the real editor.
 * `run_command` runs on the host shell after explicit approval. TrueForge's sandbox (Code Mode, skills) is not used yet.
 * Only one workspace folder is supported.
+* Turn streams are read with `fetch` instead of the SDK's stream parser, which rejected event types added in TrueForge 0.185. Approvals for a paused turn go to `/turns/{id}/events` followed by `/subscribe`. Tested with TrueForge 0.185.1.
