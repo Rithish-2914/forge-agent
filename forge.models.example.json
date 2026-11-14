@@ -81,11 +81,11 @@
     }
   ],
   "models": [
-    "mistral/mistral-medium",
-    "mistral/devstral-medium",
     "google-gemini/gemini-flash-lite-latest",
     "google-gemini/gemini-3-8-flash",
     "groq/gpt-oss-120b",
-    "ollama/qwen2-5-coder-7b"
+    "ollama/qwen2-5-coder-7b",
+    "mistral/mistral-medium",
+    "mistral/devstral-medium"
   ]
 }

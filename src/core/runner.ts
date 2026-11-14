@@ -475,6 +475,7 @@ export class ForgeRunner {
           input = responses.map((p) => ({ type: "user.tool_response", threadId: p.threadId, toolCallId: p.toolCallId, content: "The editor cannot answer questions mid-run; make a reasonable assumption and continue." }));
           continue;
         }
+        resumes = 0; // this round made progress
         const decisions = await cb.onApproval(approvals);
         if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model: curModel, text: finalText };
         input = decisions.map((d) => ({
@@ -489,7 +490,10 @@ export class ForgeRunner {
         const msg = String(e?.message ?? e);
         const kind = e instanceof ModelFailure ? e.kind : classifyError(msg);
         if (opts.signal.aborted || toolCalls.size === 0 || kind === "harness") throw e;
-        const exhausted = kind !== "transient" || resumes >= opts.retries + 3;
+        // Per-minute free-tier limits clear by themselves: keep waiting and resuming (slow but free).
+        const perMinute = /per.?minute|perminute/i.test(msg);
+        const maxResumes = perMinute ? 40 : opts.retries + 3;
+        const exhausted = kind !== "transient" || resumes >= maxResumes;
         if (exhausted) {
           // The agent already made progress: switch THIS session to the next configured model
           // (TrueForge keeps the history), so the fallback continues the task instead of redoing it.
@@ -515,8 +519,10 @@ export class ForgeRunner {
         }
         resumes++;
         const hinted = /retry in ([\d.]+)s/i.exec(msg) ?? /"retryDelay":\s*"(\d+)s"/.exec(msg);
-        const waitS = Math.min(90, Math.max(hinted ? Math.ceil(Number(hinted[1])) + 1 : 0, 10 * 2 ** (resumes - 1)));
-        cb.onStatus(`Model ${curModel} is rate-limited/overloaded (${shorten(msg, 90)}). Resuming the same TrueForge session in ${waitS}s (${resumes}/${opts.retries + 3}); progress is kept.`, "warn");
+        const waitS = perMinute
+          ? Math.max(hinted ? Math.ceil(Number(hinted[1])) + 2 : 0, 62)
+          : Math.min(90, Math.max(hinted ? Math.ceil(Number(hinted[1])) + 1 : 0, 10 * 2 ** (resumes - 1)));
+        cb.onStatus(`Model ${curModel} is rate-limited/overloaded (${shorten(msg, 90)}). Resuming the same TrueForge session in ${waitS}s (${resumes}/${maxResumes}); progress is kept.`, "warn");
         await sleep(waitS * 1000, opts.signal);
         if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model: curModel, text: finalText };
         input = [{ type: "user.message", content: "Continue the task from exactly where you stopped. Do not redo steps that already succeeded." }];

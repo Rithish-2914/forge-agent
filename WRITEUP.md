@@ -40,11 +40,11 @@ From scratch, with no fork. The editor side (webview panel, diff rendering, hunk
 ## 5. Model setup
 Models are listed in fallback order:
 
-* **Primary:** `mistral/mistral-medium`, then `mistral/devstral-medium` (Mistral free API plan, custom OpenAI-compatible provider). It's first because one agent run needs dozens of requests of about 25k tokens each, and Mistral's free plan has the most headroom for that.
-* **Then:** `google-gemini/gemini-flash-lite-latest` and `google-gemini/gemini-3-8-flash` (free tier, catalog provider). The free tier allows `gemini-3-8-flash` only 20 requests per day.
+* **Primary:** `google-gemini/gemini-flash-lite-latest` (free tier, catalog provider). Its free limits are per minute (250k input tokens, 15 requests), so Forge waits about a minute and resumes the same session. That is slow but never blocks a run. `gemini-3-8-flash` is only a fallback because its free tier allows 20 requests per day, and one agent run needs dozens.
+* **Second:** `google-gemini/gemini-3-8-flash`.
 * **Last:** `groq/gpt-oss-120b` (free tier, custom OpenAI-compatible provider). Its 8k tokens/min limit suits inline edits, not agent runs.
+* **Optional:** Mistral (`mistral/mistral-medium`) and local Ollama `qwen2.5-coder:7b` are in the example config. Setup skips any provider without a key, and neither is used in the demo.
 * **Error handling:** rate limits (per minute) wait and resume in the same session. Daily-quota, auth and model errors switch the session to the next model.
-* **Optional local:** Ollama `qwen2.5-coder:7b` (in the example config; not used in the demo).
 
 Approximate cost: ₹0 (free tiers). All models are configured in TrueForge. Users switch models by reordering the VS Code setting `forgeAgent.models` (or `forge.models.json`), or by adding a provider in TrueForge *Settings → Models*. During development we tested with a scripted mock endpoint, which is not used in the demo.
 

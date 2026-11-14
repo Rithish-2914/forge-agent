@@ -60,7 +60,7 @@ npm install && npm run compile
 MISTRAL_API_KEY=... GEMINI_API_KEY=... GROQ_API_KEY=... node scripts/setup-trueforge.mjs
 ```
 
-Any key you leave unset is skipped, and the chain uses the providers that are configured. The default chain is free: Mistral (free API plan) → Gemini (free tier) → Groq (free tier). Keys are read from environment variables and stored only inside TrueForge. **No key is ever committed**: `forge.models.json` is git-ignored.
+Any key you leave unset is skipped, and the chain uses the providers that are configured. The demo chain is free: Gemini flash-lite → Gemini 3.8-flash → Groq (all free tiers). Mistral and Ollama are optional. Keys are read from environment variables and stored only inside TrueForge. **No key is ever committed**: `forge.models.json` is git-ignored.
 
 The `models` array is the fallback chain (first = primary). You can also set it in VS Code with `"forgeAgent.models": ["mistral/mistral-medium", "google-gemini/gemini-flash-lite-latest", "groq/gpt-oss-120b"]`. To switch models, reorder that list.
 
