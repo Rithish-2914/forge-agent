@@ -2,6 +2,30 @@
   "_comment": "Copy to forge.models.json (git-ignored) and run `node scripts/setup-trueforge.mjs`. Keys are read from environment variables, never from this file. `models` is the ordered fallback chain the extension uses: first = primary, the rest take over automatically when it fails.",
   "providers": [
     {
+      "type": "custom",
+      "name": "mistral",
+      "base_url": "https://api.mistral.ai/v1",
+      "api_key_env": "MISTRAL_API_KEY",
+      "models": [
+        {
+          "model_id": "mistral-medium-latest",
+          "name": "mistral-medium",
+          "properties": {
+            "context_length": 131072,
+            "max_output_tokens": 8192
+          }
+        },
+        {
+          "model_id": "devstral-medium-latest",
+          "name": "devstral-medium",
+          "properties": {
+            "context_length": 131072,
+            "max_output_tokens": 8192
+          }
+        }
+      ]
+    },
+    {
       "type": "google-gemini",
       "api_key_env": "GEMINI_API_KEY",
       "models": [
@@ -57,6 +81,8 @@
     }
   ],
   "models": [
+    "mistral/mistral-medium",
+    "mistral/devstral-medium",
     "google-gemini/gemini-flash-lite-latest",
     "google-gemini/gemini-3-8-flash",
     "groq/gpt-oss-120b",

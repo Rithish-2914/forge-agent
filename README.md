@@ -57,12 +57,12 @@ Use **any** provider. In the TrueForge UI go to *Settings → Models* and add a 
 ```bash
 cp forge.models.example.json forge.models.json      # edit: providers + fallback order
 npm install && npm run compile
-GEMINI_API_KEY=... GROQ_API_KEY=... node scripts/setup-trueforge.mjs
+MISTRAL_API_KEY=... GEMINI_API_KEY=... GROQ_API_KEY=... node scripts/setup-trueforge.mjs
 ```
 
-Keys are read from environment variables and stored only inside TrueForge. **No key is ever committed**: `forge.models.json` is git-ignored.
+Any key you leave unset is skipped, and the chain uses the providers that are configured. The default chain is free: Mistral (free API plan) → Gemini (free tier) → Groq (free tier). Keys are read from environment variables and stored only inside TrueForge. **No key is ever committed**: `forge.models.json` is git-ignored.
 
-The `models` array is the fallback chain (first = primary). You can also set it in VS Code with `"forgeAgent.models": ["google-gemini/gemini-3-8-flash", "groq/gpt-oss-120b"]`. To switch models, reorder that list.
+The `models` array is the fallback chain (first = primary). You can also set it in VS Code with `"forgeAgent.models": ["mistral/mistral-medium", "google-gemini/gemini-flash-lite-latest", "groq/gpt-oss-120b"]`. To switch models, reorder that list.
 
 ### 3. Run the extension
 
