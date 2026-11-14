@@ -95,11 +95,12 @@ python -m venv .venv && .venv/Scripts/pip install -e . pytest==8.4.2 asgiref pyt
 
 * **A:** select `get_debug_flag` in `src/flask/helpers.py`, press `Ctrl+Alt+K`, give the instruction, accept the hunks, then run `FLASK_DEBUG=off python -c "from flask.helpers import get_debug_flag; print(get_debug_flag())"`.
 * **B:** in the panel, with no files named, give the `flask config` instruction, review and accept the hunks, then run `pytest tests/test_cli.py -q`.
-* **C:** in TrueForge *Settings → Models*, set the primary provider's key to an invalid value (or its base URL to a dead port), then repeat A. The second configured model takes over automatically, and `git status` stays clean if the hunks are rejected.
+* **C:** in TrueForge *Settings → Models*, set the primary provider's key to an invalid value (or its base URL to a dead port), then repeat A. Forge skips the other models of that provider and the next provider (Groq) takes over automatically. `git status` stays clean if the hunks are rejected.
 
 ## Tests
 
-* `node scripts/headless.mjs <workspace> "<request>" --models a,b` runs the runner, MCP server and context engine without VS Code.
+* `node scripts/headless.mjs <workspace> "<request>" --models a,b` runs the runner, MCP server and context engine without VS Code, auto-accepting hunks.
+* `node scripts/headless.mjs <workspace> "<instruction>" --inline --file src/flask/helpers.py --symbol get_debug_flag --models a,b [--apply]` runs the inline-edit path (same prompt and proposal code as the extension). Hunks are printed and written only with `--apply`.
 * `scripts/e2e/index.js` is an in-editor end-to-end suite (inline review, undo, agent tools, approvals, cancel, fallback, all-fail) run with `--extensionTestsPath`.
 * `scripts/mock-model.mjs` is a dev-only scripted OpenAI-compatible endpoint used by those tests. It is never used in the demo.
 

@@ -1,6 +1,7 @@
 // Headless harness: runs the same runner + MCP server + context engine the extension uses,
 // against a workspace folder, auto-accepting every hunk. For CI-style checks of the plumbing.
-//   node scripts/headless.mjs <workspace> "<request>" [--models a,b] [--inline]
+//   node scripts/headless.mjs <workspace> "<request>" [--models a,b]
+//   node scripts/headless.mjs <workspace> "<instruction>" --inline --file <rel> --symbol <name> --models a,b [--apply]
 import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -53,6 +54,58 @@ const host = {
   log: (m) => console.log("[mcp]", m),
 };
 
+if (args.includes("--inline")) await inlineMode();
+
+/** Inline edit exactly as the extension does it (same prompt, same runner, same proposal), without VS Code.
+ *  --file <rel> --symbol <name> picks the range; hunks are printed, and written only with --apply. */
+async function inlineMode() {
+  const { INLINE_INSTRUCTIONS, buildInlinePrompt, extractCode, buildInlineProposal } = require(path.join(out, "..", "vscode", "inline.js"));
+  const opt = (n) => (args.indexOf(n) >= 0 ? args[args.indexOf(n) + 1] : undefined);
+  const rel = opt("--file");
+  const sym = index.findSymbol(opt("--symbol")).find((s) => s.file === rel);
+  if (!sym) throw new Error(`symbol ${opt("--symbol")} not found in ${rel}`);
+  const original = fs.readFileSync(path.join(root, rel), "utf8");
+  const req = { rel, languageId: "python", original, startLine: sym.line - 1, endLine: sym.endLine - 1, instruction: request };
+  const { prompt } = buildInlinePrompt(req, index, 1500);
+  console.log(`[inline] ${rel}:${sym.line}-${sym.endLine} (${sym.name}), prompt ~${Math.ceil(prompt.length / 4)} tokens`);
+  const runner = await new ForgeRunner(TF).init();
+  let reply = "";
+  const res = await runner.run(
+    {
+      input: prompt,
+      baseSpec: { model: { name: models[0], params: { temperature: 0, maxTokens: 4096 } }, instructions: INLINE_INSTRUCTIONS, config: { dynamicSubAgents: { enabled: false }, askUserQuestions: { enabled: false } } },
+      models,
+      retries: 1,
+      firstTokenTimeoutMs: 45000,
+      signal: new AbortController().signal,
+      hasSideEffects: () => false,
+    },
+    {
+      onStatus: (m, l) => console.log(`[status:${l ?? "info"}] ${m}`),
+      onSession: (s) => console.log(`[session] ${s.sessionId} model=${s.model}`),
+      onDelta: (t) => (reply += t),
+      onMessage: (t, th, id, streamed) => {
+        if (!streamed && t) reply = t;
+      },
+      onApproval: async (p) => p.map((x) => ({ toolCallId: x.toolCallId, threadId: x.threadId, allow: false, reason: "inline edits have no tools" })),
+    },
+  );
+  console.log(`[result] ${res.status} model=${res.model ?? "-"}${res.error ? " error=" + res.error : ""}`);
+  if (res.status !== "done") process.exit(1);
+  const code = extractCode(reply, original.split(/\r?\n/).slice(req.startLine, req.endLine + 1).join("\n"));
+  if (code === null) {
+    console.log("[inline] model returned no code");
+    process.exit(1);
+  }
+  const prop = buildInlineProposal(req, code);
+  for (const h of prop.hunks) console.log(`[hunk ${h.index}] @${h.origStart + 1}\n${h.removed.map((l) => "- " + l).join("\n")}\n${h.added.map((l) => "+ " + l).join("\n")}`);
+  if (args.includes("--apply")) {
+    fs.writeFileSync(path.join(root, rel), applyHunks(original, prop.hunks, new Set(prop.hunks.map((h) => h.index))));
+    console.log(`[apply] ${rel}: ${prop.hunks.length} hunks`);
+  } else console.log("[inline] review only: nothing written (pass --apply to accept all)");
+  process.exit(0);
+}
+
 const token = getOrCreateToken();
 const srv = await startMcpHttp(host, PORT, token);
 const mcpUrl = `http://localhost:${PORT}/mcp`;
@@ -84,7 +137,7 @@ const res = await runner.run(
       if (!streamed && t) console.log(`\n[message ${th}] ${t}`);
     },
     onToolCall: (c) => console.log(`\n[tool] ${c.server ?? ""}.${c.name} ${JSON.stringify(c.args).slice(0, 160)}`),
-    onToolResult: (r) => console.log(`[tool result] ${r.content.slice(0, 160).replace(/\n/g, " ⏎ ")}`),
+    onToolResult: (r) => console.log(`[tool result] ${r.content.slice(0, 160).replace(/\n/g, " âŽ ")}`),
     onThread: (t) => console.log(`[thread] ${t.threadId} ${t.title}`),
     onCompaction: (p) => console.log(`[compaction] ${p}`),
     async onApproval(pending) {

@@ -1,6 +1,6 @@
-# Forge Agent: write-up (draft, export to PDF, 1–3 pages)
+# Forge Agent: an editor-native coding agent on TrueForge
 
-> Fill the `TODO` items (team, timestamps, final model costs) after recording the demo.
+> Fill the `TODO` items (team, video timestamps) after recording, then run the PDF export.
 
 ## 1. Team
 TODO: members, college or employer, GitHub handles.
@@ -34,12 +34,12 @@ From scratch, with no fork. The editor side (webview panel, diff rendering, hunk
 * **Trade-off:** BM25 needs no embeddings model, so it works with any or a free model, offline, and starts instantly. It misses pure synonyms, which the agent's own searches compensate for.
 
 ## 5. Model setup
-TODO: final list. Planned:
+Models are listed in fallback order:
 * **Primary:** `google-gemini/gemini-flash-lite-latest` (free tier, catalog provider). It's first because the free tier allows `gemini-3-8-flash` only 20 requests per day, and one agent run needs dozens.
 * **Second:** `google-gemini/gemini-3-8-flash`.
 * **Third:** `groq/gpt-oss-120b` (free tier, custom OpenAI-compatible provider; its 8k tokens/min limit suits inline edits).
 * **Error handling:** rate limits (per minute) wait and resume in the same session. Daily-quota, auth and model errors switch the session to the next model.
-* **Optional local:** Ollama `qwen2.5-coder:7b`.
+* **Optional local:** Ollama `qwen2.5-coder:7b` (in the example config; not used in the demo).
 
 Approximate cost: ₹0 (free tiers). All models are configured in TrueForge. Users switch models by reordering the VS Code setting `forgeAgent.models` (or `forge.models.json`), or by adding a provider in TrueForge *Settings → Models*. During development we tested with a scripted mock endpoint, which is not used in the demo.
 

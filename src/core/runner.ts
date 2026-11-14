@@ -106,6 +106,49 @@ export function camelize(v: any): any {
   return v;
 }
 
+const snakeify = (v: any): any =>
+  Array.isArray(v)
+    ? v.map(snakeify)
+    : v && typeof v === "object"
+      ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase()), snakeify(x)]))
+      : v;
+
+/**
+ * POST /sessions/{id}/turns as SSE, parsed by hand. The SDK's stream parser throws on event
+ * variants newer than its schema (seen with TrueForge 0.183), which would abort a healthy turn;
+ * here unknown events are simply passed through and ignored by the switch below.
+ */
+async function* streamTurn(baseUrl: string, sessionId: string, input: any[], signal: AbortSignal): AsyncGenerator<any> {
+  const res = await fetch(`${baseUrl.replace(/\/$/, "")}/api/v1/sessions/${encodeURIComponent(sessionId)}/turns`, {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "text/event-stream" },
+    body: JSON.stringify({ input: snakeify(input), stream: true }),
+    signal,
+  });
+  if (!res.ok || !res.body) throw new Error(`turn request failed (${res.status}): ${(await res.text().catch(() => "")).slice(0, 400)}`);
+  const decoder = new TextDecoder();
+  let buf = "";
+  for await (const chunk of res.body as any as AsyncIterable<Uint8Array>) {
+    buf += decoder.decode(chunk, { stream: true });
+    let sep: number;
+    while ((sep = buf.search(/\r?\n\r?\n/)) >= 0) {
+      const block = buf.slice(0, sep);
+      buf = buf.slice(sep).replace(/^\r?\n\r?\n/, "");
+      const data = block
+        .split(/\r?\n/)
+        .filter((l) => l.startsWith("data:"))
+        .map((l) => l.slice(5).replace(/^ /, ""))
+        .join("\n");
+      if (!data || data === "[DONE]") continue;
+      try {
+        yield JSON.parse(data);
+      } catch {
+        /* keep-alive or partial noise */
+      }
+    }
+  }
+}
+
 export class ForgeRunner {
   client: any;
   constructor(readonly baseUrl: string) {}
@@ -174,6 +217,11 @@ export class ForgeRunner {
             cb.onStatus(`Model ${model} failed (${shorten(msg)}). Retrying in ${delay / 1000}s (attempt ${attempt + 2}/${opts.retries + 1})…`, "warn");
             await sleep(delay, opts.signal);
             continue;
+          }
+          // A bad key fails every model of that provider: skip straight to another provider.
+          if (kind === "auth") {
+            const prov = model.split("/")[0];
+            while (mi + 1 < models.length && models[mi + 1].split("/")[0] === prov) mi++;
           }
           if (mi + 1 < models.length)
             cb.onStatus(`Model ${model} failed (${shorten(msg)}). Falling back to ${models[mi + 1]} automatically.`, "warn");
@@ -270,8 +318,7 @@ export class ForgeRunner {
         const pending: PendingToolCall[] = [];
         let done: any = null;
         try {
-          const stream = await this.client.sessions.createTurnStream(session.id, { input }, { abortSignal: ac.signal, timeoutInSeconds: 3600 });
-          for await (const rawEv of stream as AsyncIterable<any>) {
+          for await (const rawEv of streamTurn(this.baseUrl, session.id, input, ac.signal)) {
             const ev = camelize(rawEv);
             switch (ev.type) {
               case "model.message.delta": {

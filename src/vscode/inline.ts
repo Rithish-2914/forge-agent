@@ -1,6 +1,6 @@
-// Inline edit: select code, press Ctrl+Alt+K, describe the change. The reply streams from
+﻿// Inline edit: select code, press Ctrl+Alt+K, describe the change. The reply streams from
 // TrueForge, becomes a proposal, and is reviewed hunk by hunk in a diff editor.
-import * as vscode from "vscode";
+import type * as vscode from "vscode";
 import * as path from "path";
 import { computeHunks } from "../core/hunks";
 import { Proposal } from "../core/tools";
