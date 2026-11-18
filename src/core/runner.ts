@@ -242,15 +242,17 @@ export class ForgeRunner {
             cb.onStatus(msg, "error");
             return { status: "error", text: "", error: msg, attempts };
           }
-          const canRetry = kind === "transient" && attempt < opts.retries;
+          // A refused connection / unknown host will not heal in a few seconds: no retry.
+          const unreachable = /econnrefused|connection refused|bad port|enotfound|getaddrinfo|eai_again/i.test(msg);
+          const canRetry = kind === "transient" && !unreachable && attempt < opts.retries;
           if (canRetry) {
             const delay = 1000 * 2 ** attempt;
             cb.onStatus(`Model ${model} failed (${shorten(msg)}). Retrying in ${delay / 1000}s (attempt ${attempt + 2}/${opts.retries + 1})…`, "warn");
             await sleep(delay, opts.signal);
             continue;
           }
-          // A bad key fails every model of that provider: skip straight to another provider.
-          if (kind === "auth") {
+          // A bad key or a dead endpoint fails every model of that provider: skip to another provider.
+          if (kind === "auth" || unreachable) {
             const prov = model.split("/")[0];
             while (mi + 1 < models.length && models[mi + 1].split("/")[0] === prov) mi++;
           }
