@@ -292,6 +292,11 @@ export function createMcpServer(host: EditorHost): McpServer {
 }
 
 export function runProcess(command: string, cwd: string, timeoutSec: number, signal?: AbortSignal): Promise<{ code: number | null; output: string }> {
+  // VS Code reports drive letters in lower case ("e:\..."); some test suites compare paths
+  // case-sensitively against sys.path / __file__, so normalise to the usual "E:\...".
+  if (process.platform === "win32") cwd = cwd.replace(/^([a-z]):/, (_m, d: string) => `${d.toUpperCase()}:`);
+  // Interactive debugger flags hang a non-interactive run; drop them.
+  command = command.replace(/\s--pdb\b|\s--trace\b/g, "");
   return new Promise((resolve) => {
     const env = { ...process.env };
     for (const venv of [".venv", "venv"]) {
