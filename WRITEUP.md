@@ -1,9 +1,15 @@
 # Forge Agent: an editor-native coding agent on TrueForge
 
-> Fill the `TODO` items (team, video timestamps) after recording, then run the PDF export.
+**Demo video:** https://drive.google.com/file/d/1_-4ZzEeHwpGEd9ed0TqmcDTKEswLdRn8/view?usp=sharing  
+**Code:** https://github.com/Rithish-2914/forge-agent
 
 ## 1. Team
-TODO: members, college or employer, GitHub handles.
+All members are from **VIT Vellore**.
+
+* Rithish Bajjuri (GitHub: [Rithish-2914](https://github.com/Rithish-2914))
+* Antyakula Harshith
+* Chirumerla Sri Likitha
+* Pavan Aadarsh
 
 ## 2. Starting point
 From scratch, with no fork. The editor side (webview panel, diff rendering, hunk review, undo, keybindings) and the context engine are our own code. Dependencies: `@truefoundry/trueforge-sdk`, `@modelcontextprotocol/sdk`, `zod`.
@@ -22,7 +28,7 @@ From scratch, with no fork. The editor side (webview panel, diff rendering, hunk
 * **Harness features used, and why:**
 
     * **Deferred tool loading:** core tools (including `run_command`) are in `preload_tools`, while `list_dir` and `git_diff` stay deferred, which keeps the tool schemas out of every prompt.
-    * **Compaction:** `input_tokens` trigger at 60k, so long agent runs on a repo larger than the window keep going.
+    * **Compaction:** `input_tokens` trigger at 40k, so long agent runs on a repo larger than the window keep going.
     * **Dynamic subagents:** the root agent may delegate broad exploration and get back only paths and line ranges. Sub-agent threads render in the panel.
     * **Iteration limit:** 80.
 
@@ -40,7 +46,7 @@ From scratch, with no fork. The editor side (webview panel, diff rendering, hunk
 ## 5. Model setup
 Models are listed in fallback order:
 
-* **Primary:** `google-gemini/gemini-flash-lite-latest` (free tier, catalog provider). Its free limits are per minute (250k input tokens, 15 requests), so Forge waits about a minute and resumes the same session. That is slow but never blocks a run. `gemini-3-8-flash` is only a fallback because its free tier allows 20 requests per day, and one agent run needs dozens.
+* **Primary:** `google-gemini/gemini-flash-lite-latest` (free tier, catalog provider). Its free limits are per minute (250k input tokens, 15 requests), so Forge waits as long as the provider's retry hint asks and resumes the same session. That is slow but never blocks a run. `gemini-3-8-flash` is only a fallback because its free tier allows 20 requests per day, and one agent run needs dozens.
 * **Second:** `google-gemini/gemini-3-8-flash`.
 * **Last:** `groq/gpt-oss-120b` (free tier, custom OpenAI-compatible provider). Its 8k tokens/min limit suits inline edits, not agent runs.
 * **Optional:** Mistral (`mistral/mistral-medium`) and local Ollama `qwen2.5-coder:7b` are in the example config. Setup skips any provider without a key, and neither is used in the demo.
@@ -51,13 +57,13 @@ Approximate cost: ₹0 (free tiers). All models are configured in TrueForge. Use
 ## 6. Scorecard
 | Criterion | Video timestamp | Claim |
 |---|---|---|
-| A1 Inline edit | TODO | Diff rendered in editor; per-hunk accept/reject |
-| A2 Agent mode | TODO | Task B: discovers and edits ≥ 3 files unprompted |
-| A3 Streaming & cancellation | TODO | Tokens stream; Stop cancels immediately; workspace stays consistent |
-| B1 Context assembly | TODO | Budgeted retrieval; context card shows files chosen and why |
-| B2 Diff safety | TODO | Per-hunk review, nothing written before accept, working undo |
-| B3 Resilience | TODO | Invalid key → automatic fallback to second model; git status clean |
-| B4 TrueForge integration | TODO | MCP tools + approvals drive review; subagents/compaction/deferred loading visible in session |
+| A1 Inline edit | 0:39 (diff), 1:01 (verified False) | Diff rendered in editor; per-hunk accept/reject |
+| A2 Agent mode | 2:34 (tests pass, ≥ 3 files) | Task B: discovers and edits ≥ 3 files unprompted |
+| A3 Streaming & cancellation | 1:20–2:34 (streaming) | Tokens and tool calls stream live; Stop cancels the TrueForge turn and leaves the workspace consistent |
+| B1 Context assembly | 1:20 | Budgeted retrieval; context card shows files chosen and why |
+| B2 Diff safety | 0:39–1:01, 1:20–2:34 | Per-hunk review, nothing written before accept, working undo |
+| B3 Resilience | 3:35 | Unreachable model endpoint → clear message and automatic fallback to the next model (Groq); editor responsive; git status clean |
+| B4 TrueForge integration | 2:51 | MCP tools + approvals drive review; subagents/compaction/deferred loading visible in session |
 | C1 Video | n/a | A, B, C in order, each verified on screen |
 | C2 Write-up | n/a | This document |
 
