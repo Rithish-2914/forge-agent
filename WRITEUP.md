@@ -59,10 +59,10 @@ Approximate cost: ₹0 (free tiers). All models are configured in TrueForge. Use
 |---|---|---|
 | A1 Inline edit | 0:39 (diff), 1:01 (verified False) | Diff rendered in editor; per-hunk accept/reject |
 | A2 Agent mode | 2:34 (tests pass, ≥ 3 files) | Task B: discovers and edits ≥ 3 files unprompted |
-| A3 Streaming & cancellation | 1:20–2:34 (streaming) | Tokens and tool calls stream live; Stop cancels the TrueForge turn and leaves the workspace consistent |
+| A3 Streaming & cancellation | 1:07 (Stop), 1:20–2:34 (streaming) | Tokens and tool calls stream live; Stop cancels the TrueForge turn and leaves the workspace consistent |
 | B1 Context assembly | 1:20 | Budgeted retrieval; context card shows files chosen and why |
 | B2 Diff safety | 0:39–1:01, 1:20–2:34 | Per-hunk review, nothing written before accept, working undo |
-| B3 Resilience | 3:35 | Unreachable model endpoint → clear message and automatic fallback to the next model (Groq); editor responsive; git status clean |
+| B3 Resilience | 3:13 (endpoint broken), 3:35 (fallback) | Unreachable model endpoint → clear message and automatic fallback to the next model (Groq); editor responsive; git status clean |
 | B4 TrueForge integration | 2:51 | MCP tools + approvals drive review; subagents/compaction/deferred loading visible in session |
 | C1 Video | n/a | A, B, C in order, each verified on screen |
 | C2 Write-up | n/a | This document |
