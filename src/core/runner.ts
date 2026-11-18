@@ -521,10 +521,13 @@ export class ForgeRunner {
         }
         resumes++;
         const hinted = /retry in ([\d.]+)s/i.exec(msg) ?? /"retryDelay":\s*"(\d+)s"/.exec(msg);
+        // Wait only as long as the provider asks (Gemini says "retry in Ns"), not a fixed minute.
         const waitS = perMinute
-          ? Math.max(hinted ? Math.ceil(Number(hinted[1])) + 2 : 0, 62)
+          ? (hinted ? Math.min(65, Math.max(3, Math.ceil(Number(hinted[1])) + 1)) : Math.min(60, 15 * resumes))
           : Math.min(90, Math.max(hinted ? Math.ceil(Number(hinted[1])) + 1 : 0, 10 * 2 ** (resumes - 1)));
-        cb.onStatus(`Model ${curModel} is rate-limited/overloaded (${shorten(msg, 90)}). Resuming the same TrueForge session in ${waitS}s (${resumes}/${maxResumes}); progress is kept.`, "warn");
+        cb.onStatus(perMinute
+          ? `Free-tier per-minute limit on ${curModel}. Waiting ${waitS}s (as the provider asked), then resuming the same TrueForge session; progress is kept.`
+          : `Model ${curModel} is rate-limited/overloaded (${shorten(msg, 90)}). Resuming the same TrueForge session in ${waitS}s (${resumes}/${maxResumes}); progress is kept.`, "warn");
         await sleep(waitS * 1000, opts.signal);
         if (opts.signal.aborted) return { status: "cancelled", sessionId: session.id, model: curModel, text: finalText };
         input = [{ type: "user.message", content: "Continue the task from exactly where you stopped. Do not redo steps that already succeeded." }];
